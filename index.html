@@ -221,10 +221,10 @@
 // ============================================================
 const GAS_URL              = "https://script.google.com/macros/s/AKfycbw2SEx3xvZIhlIRjw4kZMLj1_izMbrZiJdcSl2wcyxyktKel-FX2PPZkfil2TMc5x4Hdg/exec";
 const MODEL_SOURCES        = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/'];
-const FACE_MATCH_THRESHOLD = 0.47;
-const HEAD_MOVE_RATIO      = 0.15;
-const SHAKE_TIMEOUT_MS     = 4000;
-const SAMPLE_MS            = 70;
+const FACE_MATCH_THRESHOLD = 0.52;  // Lebih toleran: 0.47 → 0.52
+const HEAD_MOVE_RATIO      = 0.12;  // Lebih mudah terdeteksi: 0.15 → 0.12
+const SHAKE_TIMEOUT_MS     = 6000;  // Lebih lama: 4s → 6s
+const SAMPLE_MS            = 60;    // Lebih cepat sampling: 70 → 60
 
 // Cache keys localStorage
 const KEY_OUTLETS      = 'gociko_outlets';
@@ -361,12 +361,12 @@ async function loadDescriptorCache(outlet) {
 
 async function detectFace(video) {
     let detection = null;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {  // Lebih banyak: 3x → 5x
         detection = await faceapi
             .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({inputSize:320, scoreThreshold:0.45}))
             .withFaceLandmarks().withFaceDescriptor();
         if (detection) break;
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 300));  // Lebih lama: 200ms → 300ms
     }
     return detection;
 }
@@ -429,22 +429,39 @@ async function detectHeadShake(video) {
     function updateDots(e,t){ const p=Math.floor((e/t)*5); while(dotIndex<p&&dotIndex<5){dots[dotIndex++].classList.add('active');} }
     function cleanup(){ container.classList.remove('blink-mode'); instruction.classList.add('hidden'); dots.forEach(d=>{d.className='blink-dot';}); }
 
-    // Warm-up + baseline digabung (max 2 detik)
+    // Fase 1: Warm-up FIXED 1.5 detik — beri user waktu siap, tidak bisa di-skip
     setCamStatus('info','Hadap kamera...');
     if(labelEl) labelEl.textContent='Hadap kamera...';
-    const warmStart=Date.now(), samples=[];
+    const warmStart=Date.now();
     let faceFound=false;
-    while(Date.now()-warmStart<2000){
+    while(Date.now()-warmStart<1500){
         const m=await getLandmarks(video);
-        if(m){ faceFound=true; samples.push(m); if(samples.length>=5) break; }
+        if(m) faceFound=true;
         await new Promise(r=>setTimeout(r,SAMPLE_MS));
     }
-    if(!faceFound||samples.length<2){ cleanup(); setCamStatus('error','Wajah tidak terdeteksi! Pastikan pencahayaan cukup.'); return false; }
+    if(!faceFound){ cleanup(); setCamStatus('error','Wajah tidak terdeteksi! Pastikan pencahayaan cukup.'); return false; }
+
+    // Fase 2: Baseline FIXED 1 detik — kumpul sampel posisi hidung
+    setCamStatus('info','Tahan diam sebentar...');
+    if(labelEl) labelEl.textContent='Tahan diam...';
+    const baseStart=Date.now(), samples=[];
+    while(Date.now()-baseStart<1000){
+        const m=await getLandmarks(video);
+        if(m) samples.push(m);
+        await new Promise(r=>setTimeout(r,SAMPLE_MS));
+    }
+    if(samples.length<3){ cleanup(); setCamStatus('error','Wajah tidak stabil! Pastikan pencahayaan cukup.'); return false; }
 
     samples.sort((a,b)=>a.noseX-b.noseX);
     const baseline=samples[Math.floor(samples.length/2)];
     const minMove=baseline.faceWidth*HEAD_MOVE_RATIO;
 
+    // Fase 3: Pesan "Siap..." sebentar sebelum instruksi geleng
+    setCamStatus('info','Siap...');
+    if(labelEl) labelEl.textContent='Siap...';
+    await new Promise(r=>setTimeout(r,600));
+
+    // Fase 4: Instruksi geleng
     setCamStatus('info','↔️ Gelengkan kepala 1x!');
     if(labelEl) labelEl.textContent='↔️ Gelengkan kepala 1x!';
     dots.forEach(d=>{d.className='blink-dot';}); dotIndex=0;
@@ -614,8 +631,8 @@ async function startVerification() {
             btn.disabled=false; btn.innerText='KONFIRMASI ABSENSI'; isProcessing=false; return;
         }
 
-        // STEP 2 — Jeda stabilisasi
-        await new Promise(r=>setTimeout(r,150));
+        // STEP 2 — Jeda stabilisasi kamera setelah geleng kepala
+        await new Promise(r=>setTimeout(r,600));  // Diperpanjang: 150ms → 600ms
 
         // STEP 3 — Deteksi Wajah
         document.getElementById('video-container').classList.add('scanning');
