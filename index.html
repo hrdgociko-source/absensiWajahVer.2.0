@@ -130,6 +130,12 @@
     </div>
     <div class="progress-bar mt-2"><div id="model-progress" class="progress-fill"></div></div>
     <p class="text-center text-xs text-gray-400 mt-4">Copyright © 2026 GOCIKO. All rights reserved.</p>
+
+    <!-- DEBUG PANEL — hapus setelah testing stabil -->
+    <div class="mt-3 px-2">
+      <button onclick="showCacheInfo()" class="w-full text-xs text-gray-300 py-1 underline">🔍 Cek Cache Info</button>
+      <div id="debug-panel" class="hidden mt-2 p-2 bg-gray-100 rounded-lg text-xs text-gray-600 font-mono break-all whitespace-pre-wrap"></div>
+    </div>
   </div>
 
   <!-- CAMERA -->
@@ -373,16 +379,32 @@ async function detectFace(video) {
 
 // 1:n match ke outletDescriptors (4-5 orang)
 function matchFaceInOutlet(descriptor) {
-    if (!outletDescriptors.length) return null;
+    if (!outletDescriptors.length) {
+        console.warn('[Gociko] outletDescriptors KOSONG saat matching!');
+        showDebug('⚠️ Descriptor kosong! Belum ter-load.');
+        return null;
+    }
     let best = null, bestDist = Infinity;
+    const log = [];
     outletDescriptors.forEach(k => {
         if (!k.descriptor) return;
         const dist = faceapi.euclideanDistance(descriptor, k.descriptor);
+        log.push(`${k.nama}: ${dist.toFixed(3)}`);
         if (dist < bestDist) { bestDist = dist; best = k; }
     });
-    console.log(`[Gociko] Best match: ${best?.nama} dist:${bestDist.toFixed(4)} threshold:${FACE_MATCH_THRESHOLD}`);
+    const msg = `Best: ${best?.nama} (${bestDist.toFixed(3)}) | threshold: ${FACE_MATCH_THRESHOLD}\n${log.join(' | ')}`;
+    console.log('[Gociko]', msg);
+    showDebug(msg);
     if (bestDist <= FACE_MATCH_THRESHOLD) return { ...best, distance: bestDist };
     return null;
+}
+
+// Debug panel — tampil di layar HP saat testing
+function showDebug(msg) {
+    let el = document.getElementById('debug-panel');
+    if (!el) return;
+    el.innerText = msg;
+    el.classList.remove('hidden');
 }
 
 // ============================================================
@@ -744,6 +766,32 @@ function setCamStatus(type, text) {
 }
 function setLoadingText(t) { const el=document.getElementById('loading-text'); if(el) el.innerText=t; }
 function setLoadingStatus(t) { const el=document.getElementById('loading-text'); if(el) el.innerText=t; }
+function showCacheInfo() {
+    const panel = document.getElementById('debug-panel');
+    if (!panel) return;
+
+    const outletKey = KEY_DESC_PREFIX + currentOutlet;
+    const cached    = localStorage.getItem(outletKey);
+    const karyawan  = cached ? JSON.parse(cached) : [];
+
+    const lines = [
+        `Outlet aktif : ${currentOutlet || '(kosong)'}`,
+        `outletDescriptors loaded: ${outletDescriptors.length} orang`,
+        `localStorage desc count : ${karyawan.length} orang`,
+        `locationVerified : ${locationVerified}`,
+        `modelsReady : ${modelsReady}`,
+        ``,
+        `Karyawan di cache:`,
+        ...karyawan.map(k => `  ${k.nik} - ${k.nama} | wajah: ${k.wajah ? k.wajah.length+' floats' : 'KOSONG'}`),
+        ``,
+        `localStorage keys:`,
+        ...Object.keys(localStorage).filter(k=>k.startsWith('gociko')).map(k=>`  ${k}`)
+    ];
+
+    panel.innerText = lines.join('\n');
+    panel.classList.remove('hidden');
+}
+
 function backToMain() { stopStream(); currentUser=null; showSection('section-main'); }
 </script>
 </body>
