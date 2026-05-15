@@ -350,9 +350,9 @@ video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
 const GAS_URL              = "https://script.google.com/macros/s/AKfycbw2SEx3xvZIhlIRjw4kZMLj1_izMbrZiJdcSl2wcyxyktKel-FX2PPZkfil2TMc5x4Hdg/exec";
 const MODEL_SOURCES        = ['https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/'];
 const FACE_MATCH_THRESHOLD = 0.52;
-const HEAD_MOVE_RATIO      = 0.12;
-const SHAKE_TIMEOUT_MS     = 6000;
-const SAMPLE_MS            = 60;
+const HEAD_MOVE_RATIO      = 0.08;
+const SHAKE_TIMEOUT_MS     = 8000;
+const SAMPLE_MS            = 100;
 const DEBUG_MODE           = true; // ← ubah false saat production
 
 const KEY_OUTLETS     = 'gociko_outlets';
@@ -634,7 +634,7 @@ async function getLandmarks(video) {
   const det = await faceapi
     .detectSingleFace(video,
       new faceapi.TinyFaceDetectorOptions({
-        inputSize:224, scoreThreshold:0.3
+        inputSize:224, scoreThreshold:0.2
       }))
     .withFaceLandmarks();
   return det ? getFaceMetrics(det.landmarks) : null;
